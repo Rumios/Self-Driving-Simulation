@@ -1,0 +1,21 @@
+# Python 캐시 파일 (업로드 금지)
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 파이썬 가상환경 (수천 개의 외부 라이브러리 파일 제외)
+venv/
+.venv/
+env/
+
+# 에디터 및 툴 설정 파일
+.vscode/
+.idea/
+
+# 임시 테스트 및 백업용 폴더 제외
+tmp1/
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
