@@ -1,7 +1,7 @@
 import pygame
 import pygame.gfxdraw
 import math
-import config.settings as settings
+from config.settings import *
 
 # sensor class
 class Sensor:
@@ -11,19 +11,23 @@ class Sensor:
         self.radius = 15
         self.angle = 0 # 센서의 초기 방향
         self.fov = 60 # 시야각
-        self.max_range = settings.RAY_MAX_RANGE # 최대 감지 범위 (임시값)
+        self.max_range = RAY_MAX_RANGE # 최대 감지 범위 (임시값)
+        self.angle_interval = 3 # Ray 간격 (임시값)
         
         # 색상 설정
-        self.body_color = settings.RED
-        self.text_color = settings.BLACK
-        self.range_color = settings.SENSOR_RANGE_COLOR
-        self.ray_color = settings.RAY_COLOR
-        self.HIT_RAY_COLOR = settings.HIT_RAY_COLOR
+        self.body_color = RED
+        self.text_color = BLACK
+        self.range_color = SENSOR_RANGE_COLOR
+        self.ray_color = RAY_COLOR
+        self.HIT_RAY_COLOR = HIT_RAY_COLOR
         
         self.point_cloud = [] # 감지된 점들의 상대적 좌표 리스트 (dx, dy)
 
-    def draw(self, screen, font, is_active, obstacles):
+    def draw(self, screen, font, is_active, obstacles, camera_x = 0, camera_y = 0):
         self.point_cloud.clear()
+        
+        screen_sensor_x = self.x - camera_x
+        screen_sensor_y = self.y - camera_y
         
         # 감지 범위 렌더링
         surface_size = self.max_range * 2
@@ -53,7 +57,7 @@ class Sensor:
             range_surface.set_alpha(alpha)
         
         # 부채꼴 렌더링
-        screen.blit(range_surface, (self.x - self.max_range, self.y - self.max_range))
+        screen.blit(range_surface, (screen_sensor_x - self.max_range, screen_sensor_y - self.max_range))
         
         # Ray 렌더링
         # 방식
@@ -65,9 +69,8 @@ class Sensor:
         # 실제 Lidar 방식과의 차이점
         # Lidar에서는 돌아오는 시간과 빛의 속력으로 거리를 계산하지만 여기서는 단순히 충돌 지점까지의 거리를 계산하는 방식
 
-        angle_interval = 4 # Ray 간격 (임시값)
         if is_active:
-            for angle in range(start_angle, end_angle + 1, angle_interval):
+            for angle in range(start_angle, end_angle + 1, self.angle_interval):
                 rad = math.radians(angle)
                 
                 # degree -> radian 변환
@@ -106,35 +109,129 @@ class Sensor:
                 self.point_cloud.append((dx, dy, final_r, rad))
                 
                 # 절대 좌표 (월드 각도)
-                end_x = self.x + final_r * math.cos(rad)
-                end_y = self.y + final_r * math.sin(rad)
+                end_x = self.x + final_r * math.cos(rad) - camera_x
+                end_y = self.y + final_r * math.sin(rad) - camera_y
                 
-                pygame.draw.line(screen, current_ray_color, (self.x, self.y), (end_x, end_y), 2)
+                pygame.draw.line(screen, current_ray_color, (screen_sensor_x, screen_sensor_y), (end_x, end_y), 2)
         
         # 본체 렌더링
-        pygame.draw.circle(screen, self.body_color, (self.x, self.y), self.radius)
-        text_surface = font.render("S", True, self.text_color)
-        text_rect = text_surface.get_rect(center=(self.x, self.y + (self.radius * 0.1)))
-        screen.blit(text_surface, text_rect)
+        pygame.draw.circle(screen, BLACK, (screen_sensor_x, screen_sensor_y), self.radius + 2)
+        pygame.draw.circle(screen, self.body_color, (screen_sensor_x, screen_sensor_y), self.radius)
+        
+        arrow_head_size = 8
+        arrow_body_size = 3
+        
+        rad = math.radians(self.angle)
+        
+        start_x = screen_sensor_x - (self.radius - 5) * math.cos(rad)
+        start_y = screen_sensor_y - (self.radius - 5) * math.sin(rad)
+        
+        end_x = screen_sensor_x + (self.radius - 5) * math.cos(rad)
+        end_y = screen_sensor_y + (self.radius - 5) * math.sin(rad)
+        
+        pygame.draw.line(
+            screen,
+            BLACK,
+            (start_x, start_y),
+            (end_x, end_y),
+            arrow_body_size
+        )
+        
+        left_rad = rad + math.radians(150)
+        right_rad = rad - math.radians(150)
+
+        left_x = end_x + arrow_head_size * math.cos(left_rad)
+        left_y = end_y + arrow_head_size * math.sin(left_rad)
+
+        right_x = end_x + arrow_head_size * math.cos(right_rad)
+        right_y = end_y + arrow_head_size * math.sin(right_rad)
+
+        pygame.draw.line(
+            screen,
+            BLACK,
+            (end_x, end_y),
+            (left_x, left_y),
+            4
+        )
+
+        pygame.draw.line(
+            screen,
+            BLACK,
+            (end_x, end_y),
+            (right_x, right_y),
+            4
+        )
     
-    def handle_input(self):
+    def handle_input(self, obstacles):
         keys = pygame.key.get_pressed()
         
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            self.angle -= settings.ROT_SPEED
+            self.angle -= ROT_SPEED
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            self.angle += settings.ROT_SPEED
+            self.angle += ROT_SPEED
         
         self.angle %= 360
         
         # 방향 벡터
         rad = math.radians(self.angle)
-        move_x = settings.SPEED * math.cos(rad)
-        move_y = settings.SPEED * math.sin(rad)
+        move_x = SPEED * math.cos(rad)
+        move_y = SPEED * math.sin(rad)
         
+        # 이동 변위
+        dx = 0
+        dy = 0
         if keys[pygame.K_w] or keys[pygame.K_UP]:
-            self.x += move_x
-            self.y += move_y
+            dx += move_x
+            dy += move_y
         if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            self.x -= move_x
-            self.y -= move_y
+            dx -= move_x
+            dy -= move_y
+            
+        if dx != 0 or dy != 0:
+            # 슬라이딩 충돌 판정
+            # X, Y축 동시에 검사하면 벽에 부딫히는 순간 멈춰버림.
+            # 그러나 따로 분리 검사 시, 열려있는 축으로 미끄러지도록 처리 가능
+            
+            # X축 검사
+            next_x = self.x + dx
+            can_move_x = True
+            
+            for obj in obstacles:
+                if not hasattr(obj, "rect"):
+                    continue
+                
+                # 원의 중심과 가장 가까운 점 찾기
+                closest_x = max(obj.rect.left, min(next_x, obj.rect.right))
+                closest_y = max(obj.rect.top, min(self.y, obj.rect.bottom))
+                
+                # 거리 계산
+                dist = (next_x - closest_x) ** 2 + (self.y - closest_y) ** 2
+                
+                if dist < self.radius ** 2:
+                    can_move_x = False
+                    break
+            
+            if can_move_x:
+               self.x = next_x 
+            
+            # Y축 검사
+            next_y = self.y + dy
+            can_move_y = True
+            
+            for obj in obstacles:
+                if not hasattr(obj, "rect"):
+                    continue
+                
+                # 원의 중심과 가장 가까운 점 찾기
+                closest_x = max(obj.rect.left, min(self.x, obj.rect.right))
+                closest_y = max(obj.rect.top, min(next_y, obj.rect.bottom))
+                
+                # 거리 계산
+                dist = (self.x - closest_x) ** 2 + (next_y - closest_y) ** 2
+                
+                if dist < self.radius ** 2:
+                    can_move_y = False
+                    break
+            
+            if can_move_y:
+                self.y = next_y

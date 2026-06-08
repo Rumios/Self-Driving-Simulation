@@ -6,7 +6,10 @@ class Object:
         self.rect = pygame.Rect(x, y, width, height)
         self.color = color
     
-    def draw(self, screen):
-        pygame.draw.rect(screen, self.color, self.rect)
+    def draw(self, screen, camera_x = 0, camera_y = 0):
+        # 카메라 위치만큼 빼서 배치
+        screen_rect = self.rect.move(-camera_x, -camera_y)
+        
+        pygame.draw.rect(screen, self.color, screen_rect)
         # 객체 경계선
-        pygame.draw.rect(screen, settings.BORDER_COLOR, self.rect, 2)
+        pygame.draw.rect(screen, settings.BORDER_COLOR, screen_rect, 2)
