@@ -1,4 +1,27 @@
 # 차량 전반적인 기능
+
+"""
+DQN 접목 방식
+
+목적지까지의 최소 waypoint를 만들어서 그곳으로 가는 최소한의 경로를 짜는 방식
+
+이 waypoint를 찍는 방식을 생각해봐야함.
+
+todo_list
+1. 맵 전체를 데이터화
+2. 최소 경로 알고리즘(A* algorithm 사용)
+3. DQN 접목
+
+1. state
+State = [
+    speed,
+    steer_angle,
+    wp_dist,
+    wp_angle
+]
+"""
+
+
 import pygame
 import math
 from config.settings import *
@@ -23,9 +46,6 @@ class Vehicle():
         
         self.ACCEL = VEHICLE_ACCEL # 가속도
         self.DECEL = DECEL # 자연 감속도       
-        
-        self.STEER_SPEED = VEHICLE_STEER_SPEED
-        self.STEER_DECEL = VEHICLE_STEER_DECEL
         
         # img
         self.image = pygame.image.load("assets/vehicle.png").convert_alpha()
@@ -58,68 +78,48 @@ class Vehicle():
         
         return vertices
     
-    def handle_input(self, dt):
+    def handle_input(self):
         keys = pygame.key.get_pressed()
         
-        accel_input = 0.0
-        steer_input = 0.0
-        
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            accel_input += 1.0
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            accel_input -= 1.0
+        # 조향각 제어
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            steer_input -= 1.0
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            steer_input += 1.0
-        
-        # 속도 처리  
-        if accel_input != 0.0:
-            self.speed += accel_input * self.ACCEL * dt
+            self.steer_angle = -self.MAX_STEER
+        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.steer_angle = self.MAX_STEER
         else:
+            self.steer_angle = 0.0 # 키 때야 조정
+        
+        # 속도 제어
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            self.speed = min(self.speed + self.ACCEL, self.MAX_SPEED)
+        elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.speed = max(self.speed - self.ACCEL, -self.MAX_SPEED * 0.85) # 후진 속도 제한
+        else:
+            # 최소 속도
             if self.speed > 0:
-                self.speed = max(self.speed - self.DECEL * dt, 0.0)
+                self.speed = max(self.speed - self.DECEL, 0.0) # 매 프레임마다 감속
             elif self.speed < 0:
-                self.speed = min(self.speed + self.DECEL * dt, 0.0)
+                self.speed = min(self.speed + self.DECEL, 0.0)
         
-        # 속도 범위 처리
-        self.speed = max(-self.MAX_SPEED * 0.75, min(self.speed, self.MAX_SPEED))
-        
-        # 조향각 처리
-        if steer_input != 0:
-            self.steer_angle += steer_input * self.STEER_SPEED * dt
-        else:
-            # 자연 감속
-            if self.steer_angle > 0:
-                self.steer_angle = max(self.steer_angle - self.STEER_DECEL * dt, 0.0)
-            elif self.steer_angle < 0:
-                self.steer_angle = min(self.steer_angle + self.STEER_DECEL * dt, 0.0)
-                
-        # 조향각 범위 처리
-        self.steer_angle = max(
-            -self.MAX_STEER,
-            min(self.steer_angle, self.MAX_STEER)
-        )
-        
-    def update(self, dt):
+    def update(self):
         # 현재 구조
         # 다른 곳에서 speed와 steer을 다룸
         # 여기선 현재의 speed와 steer 기반 다음 위치 계산하는 함수
         
-        steer_rad = math.radians(self.steer_angle)
-        
         # Bicycle Kinematic Model 참고
-        if abs(self.speed) > 1e-3 and abs(steer_rad) > 1e-6:
-            # 각속도 계산
+        steer_rad = math.radians(self.steer_angle)
+        # 한 프레임 동안 회전할 각도 변량
+        if abs(steer_rad) > 0.001:            
             angular_velocity = (self.speed / self.wheelbase) * math.tan(steer_rad)
-            
-            self.angle += math.degrees(angular_velocity * dt)
+        
+            self.angle += math.degrees(angular_velocity)
         
         self.angle %= 360
         
+        # 실제 연산
         rad = math.radians(self.angle)
-        self.x += self.speed * math.cos(rad) * dt
-        self.y += self.speed * math.sin(rad) * dt
+        self.x += self.speed * math.cos(rad)
+        self.y += self.speed * math.sin(rad)
     
     def draw(self, screen, camera_x = 0, camera_y = 0):
         
