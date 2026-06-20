@@ -139,21 +139,33 @@ class DQNAgent:
             elif self.vehicle.steer_angle < 0:
                 self.vehicle.steer_angle = min(self.vehicle.steer_angle + 6, 0.0)
     
-    def calculate_reward(self, is_collided):
+    def calculate_reward(self, is_collided, dist_moved = 0.0):
         if is_collided:
-            return -100
+            return -150
+        
+        reward = 0.0
+        
+        # 가만히 있을 때의 페널티
+        if self.vehicle.speed < 0.1:
+            reward -= 0.5
         
         state = self.get_state()
         dist = state[2] # 거리가 멀수록 페널티
         angle_error = abs(state[3]) # 각도 오차가 클수록 페널티
         
-        reward = 0.1
-        reward -= dist * 0.7
+        # 시간 페널티
+        reward -= 0.2
+        
+        reward -= dist * 1.3
         reward -= angle_error * 1.5
         
-        if angle_error < 0.1:
-            reward += 0.5
-        
+        # 올바른 방향이면 더 빠르게
+        if dist_moved > 0:
+            if angle_error < 0.2:
+                reward += (dist_moved * 0.7)
+            elif angle_error > 0.3:
+                reward -= 0.1
+            
         return reward
 
     def train(self, batch_size=32):
