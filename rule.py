@@ -21,11 +21,6 @@ class RuleManager():
         current_collision = self.check_collision()
         
         if current_collision and not self.is_collided:
-            print("규칙 1 위반. 차량 충돌")
             self.is_collided = True
-        
-        elif not current_collision and self.is_collided:
-            print("충돌 상태 해제")
-            self.is_collided = False
             
         return current_collision

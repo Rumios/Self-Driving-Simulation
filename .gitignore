@@ -26,3 +26,5 @@ dist/
 htmlcov/
 
 *.log
+
+learning_curve.png
