@@ -64,7 +64,7 @@ class ReplayBuffer:
         return len(self.memory)
     
 class DQNAgent:
-    def __init__(self, vehicle, waypoints, state_dim = 4, action_dim = 5):
+    def __init__(self, vehicle, waypoints, state_dim = 14, action_dim = 5):
         self.vehicle = vehicle
         self.waypoints = waypoints
         
@@ -72,39 +72,42 @@ class DQNAgent:
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
         self.memory = ReplayBuffer()
         self.gamma = 0.99 # 할인율
+        self.action_dim = action_dim
         
-    def get_state(self):
-        # 반환값 : [속도, 조향각, 목표와의 거리, 각도 오차]
-        # 이 부분 이해 x. 학습 과정 전반적으로 이해해야 할 듯.
+    def get_state(self, current_lidar, prev_lidar):
+        # 반환값 : [속도, 조향각, 목표와의 거리, 각도 오차] + 현재 라이다[5] + 이전 라이다[5]
         if not self.waypoints:
-            return [0, 0, 0, 0]
+            return np.zeros(14, dtype=np.float32)
         
-        target = self.waypoints[0]
+        target_idx = min(LOOKAHEAD_INDEX, len(self.waypoints) - 1)
+        target_wp = self.waypoints[target_idx]
         
-        # 거리 계산
-        dist = math.hypot(target[0] - self.vehicle.x, target[1] - self.vehicle.y)
+        dx = target_wp[0] - self.vehicle.x
+        dy = target_wp[1] - self.vehicle.y
         
-        # 각도 오차
-        # 최단 회전 방향을 찾기 위해 180 ~ -180으로 정규화
-        # atan2(dy, dx) -> x축 양의 방향(오른쪽)을 0도로 하여 반시계 방향으로 180도, 시계 방향 180도까지의 값 반환
-        target_angle = math.degrees(math.atan2(target[1] - self.vehicle.y, target[0] - self.vehicle.x))
+        # 목표 웨이포인트까지의 거리
+        dist = math.hypot(dx, dy)
+        target_angle = math.degrees(math.atan2(dy, dx))
+        
+        # 조향 오차 계산
         angle_diff = target_angle - self.vehicle.angle
+        angle_diff = (angle_diff + 180) % 360 - 180
         
-        angle_diff = (target_angle - self.vehicle.angle) % 360
-        if angle_diff > 180:
-            angle_diff -= 360
-        
-        # state 데이터 정규화 <- 신경망은 데이터 범위가 비슷할 때 학습 속도가 빠르고 안정적이어서. (k-NN 알고리즘과 비슷)
+        # state 정규화
         norm_speed = self.vehicle.speed / self.vehicle.MAX_SPEED
         norm_steer = self.vehicle.steer_angle / self.vehicle.MAX_STEER
         norm_dist = min(dist / 800.0, 1.0)
-        norm_angle = angle_diff / 180.0 
+        norm_angle_diff = angle_diff / 180.0 
 
-        # State = [speed, steer_angle, wp_dist, wp_angle]
-        return [norm_speed, norm_steer, norm_dist, norm_angle]
+        norm_current = [d / 150.0 for d in current_lidar]
+        norm_prev = [d / 150.0 for d in prev_lidar]
+        
+        state = [norm_speed, norm_steer, norm_dist, norm_angle_diff] + norm_current + norm_prev
+            
+        return np.array(state, dtype=np.float32)
     
     # 웨이포인트 주변 threshold px 안에 다가오면 업데이트
-    def update_waypoints(self, threshold=50):
+    def update_waypoints(self, threshold=WAYPOINT_MARGIN):
         if self.waypoints:
             dist = math.hypot(self.waypoints[0][0] - self.vehicle.x, self.waypoints[0][1] - self.vehicle.y)
             if dist < threshold:
@@ -139,39 +142,44 @@ class DQNAgent:
             elif self.vehicle.steer_angle < 0:
                 self.vehicle.steer_angle = min(self.vehicle.steer_angle + 6, 0.0)
     
-    def calculate_reward(self, is_collided, dist_moved = 0.0):
+    def calculate_reward(self, current_distance, prev_distance, current_lidar, 
+                         is_waypoint_cleared, is_goal_reached, is_timeout, is_collided, angle_diff):
+        if is_goal_reached:
+            return REWARD_GOAL
+        if is_timeout:
+            return PENALTY_TIMEOUT
         if is_collided:
-            return -150
+            return PENALTY_COLLISION
         
         reward = 0.0
         
-        # 가만히 있을 때의 페널티
-        if self.vehicle.speed < 0.1:
-            reward -= 0.5
+        # waypoint 도착 시
+        if is_waypoint_cleared:
+            reward += REWARD_WAYPOINT
         
-        state = self.get_state()
-        dist = state[2] # 거리가 멀수록 페널티
-        angle_error = abs(state[3]) # 각도 오차가 클수록 페널티
-        
-        # 시간 페널티
-        reward -= 0.2
-        
-        reward -= dist * 1.3
-        reward -= angle_error * 1.5
-        
-        # 올바른 방향이면 더 빠르게
-        if dist_moved > 0:
-            if angle_error < 0.2:
-                reward += (dist_moved * 0.7)
-            elif angle_error > 0.3:
-                reward -= 0.1
+        dist_delta = prev_distance - current_distance
+        if dist_delta > 0:
+            reward += (dist_delta * REWARD_DISTANCE_SCALE)
             
+        # Heading Error Penalty
+        normalized_heading_error = abs(angle_diff) / 180.0
+        heading_penalty = normalized_heading_error * HEADING_PENALTY_SCALE
+        reward -= heading_penalty
+
+        min_lidar_dist = min(current_lidar)
+        if min_lidar_dist < LIDAR_SAFE_DISTANCE:
+            max_danger = (LIDAR_SAFE_DISTANCE - min_lidar_dist) / LIDAR_SAFE_DISTANCE
+            
+            risk_penalty = (max_danger ** LIDAR_PENALTY_EXPONENT) * LIDAR_PENALTY_MAX
+            reward -= risk_penalty
+        
         return reward
 
     def train(self, batch_size=32):
         if len(self.memory) < batch_size: return
         
         batch, indices = self.memory.sample(batch_size)
+                
         # zip(*memory) -> 여러 튜플이 모인 리스트를 열 단위로 분리해줌.
         states, actions, rewards, next_states, dones = zip(*batch)
         

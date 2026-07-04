@@ -26,3 +26,26 @@ YELLOW = (255, 255, 0)
 BG_COLOR = (230, 230, 230)
 OBJECT_COLOR = (190, 195, 200)
 BORDER_COLOR = (170, 175, 180)
+
+
+# Reward
+# 1. Milestone & Goal Rewards
+REWARD_GOAL = 500.0
+REWARD_WAYPOINT = 20.0 
+
+# 2. Episode Penalties
+PENALTY_TIMEOUT = -100.0
+PENALTY_COLLISION = -300.0
+
+# 3. Lidar Risk Penalty Parameters (Pareto Optimization)
+LIDAR_SAFE_DISTANCE = 80.0
+LIDAR_PENALTY_MAX = 15.5
+LIDAR_PENALTY_EXPONENT = 2.0
+
+# 4. Base Kinematics Rewards
+REWARD_DISTANCE_SCALE = 0.5
+WAYPOINT_MARGIN = 50.0
+
+# Look-ahead & Heading Parameters
+LOOKAHEAD_INDEX = 2 # 추적할 전방 웨이포인트 인덱스 (0 : 현재 웨이포인트, n : n번째 앞)
+HEADING_PENALTY_SCALE = 0.5 # 각도 오차 페널치

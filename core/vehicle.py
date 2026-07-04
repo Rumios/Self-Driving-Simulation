@@ -1,27 +1,3 @@
-# 차량 전반적인 기능
-
-"""
-DQN 접목 방식
-
-목적지까지의 최소 waypoint를 만들어서 그곳으로 가는 최소한의 경로를 짜는 방식
-
-이 waypoint를 찍는 방식을 생각해봐야함.
-
-todo_list
-1. 맵 전체를 데이터화
-2. 최소 경로 알고리즘(A* algorithm 사용)
-3. DQN 접목
-
-1. state
-State = [
-    speed,
-    steer_angle,
-    wp_dist,
-    wp_angle
-]
-"""
-
-
 import pygame
 import math
 from config.settings import *
@@ -45,7 +21,7 @@ class Vehicle():
         self.MAX_STEER = VEHICLE_MAX_STEER # 최대 조향각
         
         self.ACCEL = VEHICLE_ACCEL # 가속도
-        self.DECEL = DECEL # 자연 감속도       
+        self.DECEL = DECEL # 자연 감속도   '
         
         # img
         self.image = pygame.image.load("assets/vehicle.png").convert_alpha()
@@ -120,6 +96,51 @@ class Vehicle():
         rad = math.radians(self.angle)
         self.x += self.speed * math.cos(rad)
         self.y += self.speed * math.sin(rad)
+    
+    """
+    현재와 과거의 ray 거리를 둘 다 줘서 모델에게 인과관계를 제시함.
+    예) -60도 방면의 ray에서 거리가 100px -> 40px로 오니까 보상이 줄어드네? -> 안 좋은거구나
+    """
+    def get_lidar_readings(self, obstacles, max_range = 150):
+        angles = [-60, -30, 0, 30, 60]
+        readings = []
+        
+        for alpha in angles:
+            rad = math.radians(self.angle + alpha)
+            start_p = (self.x, self.y)
+            end_p = (self.x + max_range * math.cos(rad), self.y + max_range * math.sin(rad))
+            
+            min_dist = float(max_range)
+            
+            for obj in obstacles:
+                # Pygame Rect와 교차점 검사 -> 최소 거리
+                clipped = obj.rect.clipline(start_p, end_p)
+                if clipped:
+                    p1, p2 = clipped
+                    d1 = math.hypot(p1[0] - self.x, p1[1] - self.y)
+                    d2 = math.hypot(p2[0] - self.x, p2[1] - self.y)
+                    min_dist = min(min_dist, d1, d2)
+            
+            readings.append(min_dist)
+        
+        return readings
+    
+    def draw_lidar(self, screen, obstacles, camera_x = 0, camera_y = 0, max_range = 150):
+        angles = [-60, -30, 0, 30, 60]
+        readings = self.get_lidar_readings(obstacles, max_range)
+        
+        for alpha, dist in zip(angles, readings):
+            rad = math.radians(self.angle + alpha)
+            start_screen = (int(self.x - camera_x), int(self.y - camera_y))
+            end_screen = (
+                int(self.x + dist * math.cos(rad) - camera_x),
+                int(self.y + dist * math.sin(rad) - camera_y)
+            )
+            
+            # safe margin : 40px (센서가 차 중심에 있어서 이정도는 해야함.)
+            color = (255, 0, 0) if dist < 40 else (0, 255, 0)
+            pygame.draw.line(screen, color, start_screen, end_screen, 1)
+            pygame.draw.circle(screen, color, end_screen, 3)
     
     def draw(self, screen, camera_x = 0, camera_y = 0):
         
