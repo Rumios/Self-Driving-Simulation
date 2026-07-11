@@ -15,6 +15,9 @@ VEHICLE_MAX_STEER = 30
 VEHICLE_ACCEL = 0.2
 DECEL = 0.1
 
+# 기타
+OBJECT_SPEED = 0.5
+
 # 색상
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -45,7 +48,9 @@ LIDAR_PENALTY_EXPONENT = 2.0
 # 4. Base Kinematics Rewards
 REWARD_DISTANCE_SCALE = 0.5
 WAYPOINT_MARGIN = 50.0
+HEADING_MARGIN = 90.0
+GOAL_RADIUS = WAYPOINT_MARGIN
 
 # Look-ahead & Heading Parameters
-LOOKAHEAD_INDEX = 2 # 추적할 전방 웨이포인트 인덱스 (0 : 현재 웨이포인트, n : n번째 앞)
+LOOKAHEAD_INDEX = 1 # 추적할 전방 웨이포인트 인덱스 (0 : 현재 웨이포인트, n : n번째 앞)
 HEADING_PENALTY_SCALE = 0.5 # 각도 오차 페널치

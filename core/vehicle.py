@@ -107,8 +107,8 @@ class Vehicle():
         
         for alpha in angles:
             rad = math.radians(self.angle + alpha)
-            start_p = (self.x, self.y)
-            end_p = (self.x + max_range * math.cos(rad), self.y + max_range * math.sin(rad))
+            start_p = (int(self.x), int(self.y))
+            end_p = (int(self.x + max_range * math.cos(rad)), int(self.y + max_range * math.sin(rad)))
             
             min_dist = float(max_range)
             
@@ -138,7 +138,7 @@ class Vehicle():
             )
             
             # safe margin : 40px (센서가 차 중심에 있어서 이정도는 해야함.)
-            color = (255, 0, 0) if dist < 40 else (0, 255, 0)
+            color = (255, 0, 0) if dist < LIDAR_SAFE_DISTANCE else (0, 255, 0)
             pygame.draw.line(screen, color, start_screen, end_screen, 1)
             pygame.draw.circle(screen, color, end_screen, 3)
     
